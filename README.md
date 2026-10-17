@@ -1,5 +1,7 @@
 # Lo-Fi Player 100
 
+![Lo-Fi Player 100 on an fx-CG100, playing through a 2.5 mm to 3.5 mm adapter into headphones](assets/header.jpg)
+
 WAV / MP3 / Opus music player for the CASIO fx-CG50 / Graph 90+E and fx-CG100 / Graph Math+ (OS 2.00).
 
 **English summary.** Lo-Fi Player 100 is a gint add-in that plays WAV, MP3 and Ogg Opus files through the
