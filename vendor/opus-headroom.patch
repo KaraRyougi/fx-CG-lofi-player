@@ -1,0 +1,91 @@
+diff -ru a/vendor/opus/celt/celt_decoder.c b/vendor/opus/celt/celt_decoder.c
+--- a/vendor/opus/celt/celt_decoder.c	2026-10-16 02:02:51
++++ b/vendor/opus/celt/celt_decoder.c	2026-10-16 02:02:51
+@@ -223,6 +223,15 @@
+ }
+ #endif /* CUSTOM_MODES */
+ 
++/* CGplayer100: output headroom. Peaks above full scale are kept up to here
++   and only saturated by SIG2WORD16, so scale the output (not the
++   de-emphasis state) down first; see src/mp3-decode.h. */
++#if defined(FIXED_POINT) && defined(OPUS_OUTPUT_HEADROOM_Q15)
++#define OUT_HEADROOM(x) MULT16_32_Q15(OPUS_OUTPUT_HEADROOM_Q15, x)
++#else
++#define OUT_HEADROOM(x) (x)
++#endif
++
+ #ifndef CUSTOM_MODES
+ /* Special case for stereo with no downsampling and no accumulation. This is
+    quite common and we can make it faster by processing both channels in the
+@@ -246,8 +255,8 @@
+       tmp1 = x1[j] + VERY_SMALL + m1;
+       m0 = MULT16_32_Q15(coef0, tmp0);
+       m1 = MULT16_32_Q15(coef0, tmp1);
+-      pcm[2*j  ] = SCALEOUT(SIG2WORD16(tmp0));
+-      pcm[2*j+1] = SCALEOUT(SIG2WORD16(tmp1));
++      pcm[2*j  ] = SCALEOUT(SIG2WORD16(OUT_HEADROOM(tmp0)));
++      pcm[2*j+1] = SCALEOUT(SIG2WORD16(OUT_HEADROOM(tmp1)));
+    }
+    mem[0] = m0;
+    mem[1] = m1;
+@@ -323,7 +332,7 @@
+             {
+                celt_sig tmp = x[j] + m + VERY_SMALL;
+                m = MULT16_32_Q15(coef0, tmp);
+-               y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(tmp))));
++               y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(OUT_HEADROOM(tmp)))));
+             }
+          } else
+ #endif
+@@ -332,7 +341,7 @@
+             {
+                celt_sig tmp = x[j] + VERY_SMALL + m;
+                m = MULT16_32_Q15(coef0, tmp);
+-               y[j*C] = SCALEOUT(SIG2WORD16(tmp));
++               y[j*C] = SCALEOUT(SIG2WORD16(OUT_HEADROOM(tmp)));
+             }
+          }
+       }
+@@ -345,12 +354,12 @@
+          if (accum)
+          {
+             for (j=0;j<Nd;j++)
+-               y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(scratch[j*downsample]))));
++               y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(OUT_HEADROOM(scratch[j*downsample])))));
+          } else
+ #endif
+          {
+             for (j=0;j<Nd;j++)
+-               y[j*C] = SCALEOUT(SIG2WORD16(scratch[j*downsample]));
++               y[j*C] = SCALEOUT(SIG2WORD16(OUT_HEADROOM(scratch[j*downsample])));
+          }
+       }
+    } while (++c<C);
+diff -ru a/vendor/opus/config.h b/vendor/opus/config.h
+--- a/vendor/opus/config.h	2026-10-16 02:02:51
++++ b/vendor/opus/config.h	2026-10-16 02:02:51
+@@ -8,3 +8,8 @@
+    use and kept for the life of the add-in. */
+ #define NONTHREADSAFE_PSEUDOSTACK 1
+ #define GLOBAL_STACK_SIZE 24000
++/* Output 4 dB below full scale so that codec overshoot above 0 dBFS is kept
++   instead of saturated (celt_decoder.c OUT_HEADROOM, opus_decoder.c SILK
++   path); the player adds it back in front of its limiter. Same value as
++   DECODE_HEADROOM_Q15 in src/mp3-decode.h. */
++#define OPUS_OUTPUT_HEADROOM_Q15 20675
+diff -ru a/vendor/opus/src/opus_decoder.c b/vendor/opus/src/opus_decoder.c
+--- a/vendor/opus/src/opus_decoder.c	2026-10-16 02:02:51
++++ b/vendor/opus/src/opus_decoder.c	2026-10-16 02:02:51
+@@ -412,6 +412,12 @@
+              return OPUS_INTERNAL_ERROR;
+            }
+         }
++#if defined(FIXED_POINT) && defined(OPUS_OUTPUT_HEADROOM_Q15)
++        /* CGplayer100: same output headroom as CELT (celt_decoder.c), so that
++           hybrid frames stay balanced. SILK's own resampler still saturates. */
++        for (i=0;i<silk_frame_size*st->channels;i++)
++           pcm_ptr[i] = (opus_int16)(((opus_int32)pcm_ptr[i]*OPUS_OUTPUT_HEADROOM_Q15)>>15);
++#endif
+         pcm_ptr += silk_frame_size * st->channels;
+         decoded_samples += silk_frame_size;
+       } while( decoded_samples < frame_size );

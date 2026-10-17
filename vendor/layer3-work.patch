@@ -1,0 +1,43 @@
+--- a/libmad/layer3.c
++++ b/libmad/layer3.c
+@@ -45,6 +45,21 @@
+ # include "huffman.h"
+ # include "layer3.h"
+ 
++/* CGplayer100: the requantization work array (4.6 KB, rewritten for every
++   granule) is a static buffer instead of III_decode()'s stack array, so
++   that the build can place it in on-chip memory (MAD_WORK_XYRAM: gint's
++   .xyram section at 0xe500e000) and keep its bursts of stores off the
++   external bus. The decoder runs single-threaded here; III_decode() is no
++   longer reentrant. mad_layer_III_xr may be repointed between frames (the
++   diagnostic build switches it against an SDRAM buffer). */
++# if defined(MAD_WORK_XYRAM)
++#  define MAD_WORK_ATTR __attribute__((section(".xyram")))
++# else
++#  define MAD_WORK_ATTR
++# endif
++static mad_fixed_t III_xr_work[2][576] MAD_WORK_ATTR;
++mad_fixed_t (*mad_layer_III_xr)[576] = III_xr_work;
++
+ /* --- Layer III ----------------------------------------------------------- */
+ 
+ enum {
+@@ -2440,7 +2455,7 @@
+   for (gr = 0; gr < ngr; ++gr) {
+     struct granule *granule = &si->gr[gr];
+     unsigned char const *sfbwidth[2];
+-    mad_fixed_t xr[2][576];
++    mad_fixed_t (*xr)[576] = mad_layer_III_xr;
+     unsigned int ch;
+     enum mad_error error;
+ 
+--- a/libmad/layer3.h
++++ b/libmad/layer3.h
+@@ -27,4 +27,7 @@
+ 
+ int mad_layer_III(struct mad_stream *, struct mad_frame *);
+ 
++/* CGplayer100: location of the requantization work array (layer3.c). */
++extern mad_fixed_t (*mad_layer_III_xr)[576];
++
+ # endif

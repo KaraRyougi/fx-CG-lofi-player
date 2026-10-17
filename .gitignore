@@ -1,0 +1,10 @@
+# build output
+/build-*/
+/dist/
+*.g3a
+*.dSYM/
+# local only: development archive (old releases, recordings, NOR dumps) and tools
+/archive/
+/.venv/
+__pycache__/
+.DS_Store
